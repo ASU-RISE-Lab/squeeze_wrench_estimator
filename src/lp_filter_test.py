@@ -23,7 +23,7 @@ class LP_Filter(Node):
     def __init__(self):
         super().__init__('LP_Filter')
 
-        self.acc_x_prev = 0.0
+        self.acc_x_filt_prev = 0.0
 
         self.imu_sub = self.create_subscription(SensorCombined ,"/fmu/sensor_combined/out",self.imu_callback,10)
         self.time_sub = self.create_subscription(Timesync ,"/fmu/timesync/out",self.timestamp_callback,10)
@@ -42,8 +42,8 @@ class LP_Filter(Node):
         self.acc_z = msg.accelerometer_m_s2[2]
         self.acc_norm = np.sqrt((self.acc_x**2)+(self.acc_y**2)+(self.acc_z**2))
 
-        self.acc_x_new = (self.acc_x_prev * 0.9) + (self.acc_x * 0.1)
-        self.acc_x_prev = self.acc_x_new
+        self.acc_x_filt_new = (self.acc_x_filt_prev * 0.9) + (self.acc_x * 0.1)
+        self.acc_x__filt_prev = self.acc_x_filt_new
 
         msg = Float32()
         msg.data = self.acc_x_new
