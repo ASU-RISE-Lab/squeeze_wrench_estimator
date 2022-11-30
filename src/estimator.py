@@ -52,27 +52,6 @@ class Wrench_Estimator(Node):
 
         if(msg.timestamp - self.timestamp != 0):
 
-            # if (self.count < self.len):
-            #     self.filtimu1[self.count] = msg.imu1
-            #     self.filtimu2[self.count] = msg.imu2
-            #     self.filtimu3[self.count] = msg.imu3
-            #     self.filtimu4[self.count] = msg.imu4
-            #     self.count += 1
-            # if (self.count == self.len):
-            #     self.filtimu1 = self.butter_lowpass_filter(self.filtimu1, 5, 100, 1, self.len)
-            #     self.filtimu2 = self.butter_lowpass_filter(self.filtimu2, 5, 100, 1, self.len)
-            #     self.filtimu3 = self.butter_lowpass_filter(self.filtimu3, 5, 100, 1, self.len)
-            #     self.filtimu4 = self.butter_lowpass_filter(self.filtimu4, 5, 100, 1, self.len)
-            #     msg.imu1 = self.filtimu1[self.len-1]
-            #     msg.imu2 = self.filtimu2[self.len-1]
-            #     msg.imu3 = self.filtimu3[self.len-1]
-            #     msg.imu4 = self.filtimu4[self.len-1]
-            #     self.filtimu1[:self.len-1] = self.filtimu1[1:]
-            #     self.filtimu2[:self.len-1] = self.filtimu2[1:]
-            #     self.filtimu3[:self.len-1] = self.filtimu3[1:]
-            #     self.filtimu4[:self.len-1] = self.filtimu4[1:]
-            #     self.count = self.len - 1
-
             self.dt = msg.timestamp - self.timestamp
 
             # self.imu1[3] = ((msg.imu1 - self.imu1[1])/self.dt - self.imu1[2]) / self.dt
@@ -137,15 +116,6 @@ class Wrench_Estimator(Node):
         print("Arm3 Force:",msg.imu3_force,"Angle:",self.imu3[1]*180/3.14)
         print("Arm4 Force:",msg.imu4_force,"Angle:",self.imu4[1]*180/3.14)
         self.force_pub.publish(msg)
-
-    def butter_lowpass_filter(self, sample_data, cutoff, fs, order, n):
-        data = sample_data[:n]
-        nyq = 0.5 * fs  # Nyquist Frequency:
-        normal_cutoff = cutoff / nyq
-        # Get the filter coefficients 
-        b, a = butter(order, normal_cutoff, btype='low', analog=False)
-        y = filtfilt(b, a, data)
-        return y
 
 def main(args=None):
     rclpy.init(args=args)
