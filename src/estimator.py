@@ -165,6 +165,7 @@ class Wrench_Estimator(Node):
         msg.f_z = float(round(self.f_hat_b_w[2],4))
 
         self.wrench_pub.publish(msg)
+        print(msg)
 
     def rt_matrix(self, theta):
 
