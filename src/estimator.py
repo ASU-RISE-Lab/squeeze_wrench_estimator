@@ -12,6 +12,10 @@ import math
 from scipy.signal import butter,filtfilt
 
 from px4_msgs.msg import VehicleAttitude
+from px4_msgs.msg import SensorCombined
+from px4_msgs.msg import ControllerOut
+from px4_msgs.msg import VehicleOdometry
+
 from scipy.spatial.transform import Rotation as R
 
 class Wrench_Estimator(Node):
@@ -32,6 +36,31 @@ class Wrench_Estimator(Node):
         self.imu3_prev = [0.0,0.0,0.0,0.0]
         self.imu4_prev = [0.0,0.0,0.0,0.0]
 
+        self.f = np.array([0.0,0.0,0.0])
+        self.tau = np.array([0.0,0.0,0.0])
+
+        self.v = np.array([0.0,0.0,0.0])
+        self.v_prev = np.array([0.0,0.0,0.0])
+        self.v_dot = np.array([0.0,0.0,0.0])
+        self.v_dot_prev = np.array([0.0,0.0,0.0])
+
+        self.omega = np.array([0.0,0.0,0.0])
+        self.omega_prev = np.array([0.0,0.0,0.0])
+        self.omega_dot = np.array([0.0,0.0,0.0])
+        self.omega_dot_prev = np.array([0.0,0.0,0.0])
+
+        self.gamma = 0.25 # LP filter for v_dot and omega_dot
+
+        self.inertia_mat = ([0.0037,0,0],[0, 0.0037,0],[0,0,0.0067]) # kg.m^2
+        self.mass = 1.25 # kg
+        self.g = 9.81 # m/s^2
+
+        self.v_timestamp = 0.0
+
+        self.e1 = np.array([1,0,0])
+        self.e2 = np.array([0,1,0])
+        self.e3 = np.array([0,0,1])
+
         self.first_call_back = 0
         self.count = 0
         self.len = 7
@@ -39,14 +68,48 @@ class Wrench_Estimator(Node):
 
         self.alpha = np.zeros(4)
 
+        # Subscribers
         self.imu_angle_sub = self.create_subscription(ImuData, 'IMU_Data', self.imu_angle_callback, 1)
-
         self.att_sub = self.create_subscription(VehicleAttitude, '/fmu/vehicle_attitude/out', self.attitude_callback, 1)
+        self.sensor_combined_sub = self.create_subscription(SensorCombined, '/fmu/sensor_combined/out', self.sensor_combined_callback, 1)
+        self.vehicle_odometry_sub = self.create_subscription(VehicleOdometry, '/fmu/vehicle_odometry/out', self.vehicle_odometry_callback, 1)
+        self.controller_out_sub = self.create_subscription(ControllerOut, '/fmu/controller_out/out', self.controller_out_callback, 1)
 
+        # Publishers
         self.wrench_pub = self.create_publisher(ExternalWrenchEstimate, 'External_Wrench_Estimate', 1)
 
-        timer_period = 50 # Hz
-        # self.timer = self.create_timer(1/timer_period, self.timer_callback)
+        # timer_period = 50 # Hz
+        # self.timer = self.create_timer(1/timer_period, self.wrench_estimator)        
+
+    def controller_out_callback(self, msg):
+        self.tau = msg.tau
+        self.f = msg.f
+        # self.wrench_estimator_body()
+
+    def vehicle_odometry_callback(self, msg):
+
+        self.v = np.array([msg.vx, msg.vy, msg.vz])
+        self.omega = np.array([msg.rollspeed, msg.pitchspeed, msg.yawspeed])
+        self.v_dt = msg.timestamp - self.v_timestamp
+
+        self.v_timestamp = msg.timestamp
+        self.v_dot = (self.v - self.v_prev) / self.v_dt
+        self.omega_dot = (self.omega - self.omega_prev) / self.v_dt
+
+        self.v_dot = (self.v_dot * self.gamma) + (self.v_dot_prev * (1 - self.gamma))
+        self.omega_dot = (self.omega_dot * self.gamma) + (self.omega_dot_prev * (1 - self.gamma))
+
+        self.v_prev = self.v
+        self.omega_prev = self.omega
+        self.v_dot_prev = self.v_dot
+        self.omega_dot_prev = self.omega_dot
+        self.v_timestamp = msg.timestamp
+
+    def sensor_combined_callback(self, msg):
+
+        self.acc_x = msg.accelerometer_m_s2[0]
+        self.acc_y = msg.accelerometer_m_s2[1]
+        self.acc_z = msg.accelerometer_m_s2[2]
 
     def attitude_callback(self, msg):
 
@@ -102,7 +165,10 @@ class Wrench_Estimator(Node):
             self.timestamp = msg.timestamp
 
         # print(self.imu1)
-        self.timer_callback()
+
+        self.wrench_estimator_body()
+        self.wrench_estimator_arm()
+
 
     def dthetha_eff(self, dtheta):
 
@@ -121,7 +187,15 @@ class Wrench_Estimator(Node):
         return dtheta_eff
         # return dtheta
 
-    def timer_callback(self):
+    def wrench_estimator_body(self):
+        
+        self.f_hat_body = (self.mass * self.v_dot) - (self.mass * self.g * self.e3) + self.f
+
+        self.tau_hat_body = np.matmul(self.inertia_mat , (self.omega_dot)) + np.cross((self.omega), np.matmul(self.inertia_mat , self.omega)) - np.transpose(self.tau)
+        
+        # print(self.tau_hat_body)
+
+    def wrench_estimator_arm(self):
 
         msg = ExternalWrenchEstimate()
 
@@ -131,9 +205,6 @@ class Wrench_Estimator(Node):
         self.f_hat_imu2 = ( 1.3077 * self.imu2[1] + 0.01 * self.imu2[2] + 0.0015 * self.imu2[3] ) / self.arm_length
         self.f_hat_imu3 = ( 1.3077 * self.imu3[1] + 0.01 * self.imu3[2] + 0.0015 * self.imu3[3] ) / self.arm_length
         self.f_hat_imu4 = ( 1.3077 * self.imu4[1] + 0.01 * self.imu4[2] + 0.0015 * self.imu4[3] ) / self.arm_length
-
-        self.e1 = np.array([1,0,0])
-        self.e2 = np.array([0,1,0])
 
         self.b1 = np.matmul(self.rotation_matrix,self.e1)
         self.b2 = np.matmul(self.rotation_matrix,self.e2)
@@ -160,12 +231,20 @@ class Wrench_Estimator(Node):
 
         self.f_hat_b_w =  self.f_hat_imu1_b_w + self.f_hat_imu2_b_w + self.f_hat_imu3_b_w + self.f_hat_imu4_b_w
 
-        msg.f_x = float(round(self.f_hat_b_w[0],4))
-        msg.f_y = float(round(self.f_hat_b_w[1],4))
-        msg.f_z = float(round(self.f_hat_b_w[2],4))
+        self.tau_hat_arm = (self.f_hat_imu1 + self.f_hat_imu2 + self.f_hat_imu3 + self.f_hat_imu4) * self.arm_length
+
+        msg.f_x = float(self.f_hat_b_w[0] + self.f_hat_body[0])
+        msg.f_y = float(self.f_hat_b_w[1] + self.f_hat_body[1])
+        msg.f_z = float(self.f_hat_b_w[2] + self.f_hat_body[2])
+
+        msg.tau_p = float(self.tau_hat_body[0])
+        msg.tau_q = float(self.tau_hat_body[1])
+        msg.tau_r = float(self.tau_hat_body[2] + self.tau_hat_arm)
+
+        msg.timestamp = self.timestamp
 
         self.wrench_pub.publish(msg)
-        print(msg)
+        # print(msg)
 
     def rt_matrix(self, theta):
 
