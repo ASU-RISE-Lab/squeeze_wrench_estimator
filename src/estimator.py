@@ -51,9 +51,12 @@ class Wrench_Estimator(Node):
 
         self.gamma = 0.25 # LP filter for v_dot and omega_dot
 
-        self.inertia_mat = ([0.0037,0,0],[0, 0.0037,0],[0,0,0.0067]) # kg.m^2
+        self.inertia_mat = ([0.011160,0.000003,0.000058],[0.000003, 0.011260,0.000044],[0.000058,0.000044,0.018540]) # kg.m^2
         self.mass = 1.25 # kg
         self.g = 9.81 # m/s^2
+
+        self.controller_out_prev = np.array([0.0,0.0,0.0,0.0,0.0,0.0]) # fx, fy, fz, taux, tauy, tauz
+        self.alpha_controller_out = np.array([0.01,0.01,0.05,0.05,0.3,0.5])
 
         self.v_timestamp = 0.0
 
@@ -79,11 +82,23 @@ class Wrench_Estimator(Node):
         self.wrench_pub = self.create_publisher(ExternalWrenchEstimate, 'External_Wrench_Estimate', 1)
 
         # timer_period = 50 # Hz
-        # self.timer = self.create_timer(1/timer_period, self.wrench_estimator)        
+        # self.timer = self.create_timer(1/timer_period, self.wrench_estimator)
+        # 
+
+    def lp_filter(self,current, previous, alpha):
+        return alpha*current + (1-alpha)*previous
 
     def controller_out_callback(self, msg):
-        self.tau = msg.tau
-        self.f = msg.f
+
+        # print(msg.f[0], msg.f[1], msg.f[2], msg.tau[0], msg.tau[1], msg.tau[2])
+
+        self.controller_out_estimate = np.array([msg.f[0]*0, msg.f[1]*0, msg.f[2]*32.66, msg.tau[0]*1.36, msg.tau[1]*1.36, msg.tau[2]*0.012])
+        self.controller_out_lpf  = self.lp_filter(self.controller_out_estimate, self.controller_out_prev, self.alpha_controller_out)
+        self.controller_out_prev = self.controller_out_lpf
+
+        self.f = self.controller_out_lpf[:3]
+        self.tau = self.controller_out_lpf[3:]
+
         # self.wrench_estimator_body()
 
     def vehicle_odometry_callback(self, msg):
@@ -128,9 +143,9 @@ class Wrench_Estimator(Node):
         self.theta = [msg.imu1, msg.imu2, msg.imu3, msg.imu4] # Actual arm angles from node
 
         msg.imu1 = -(msg.imu1 - 135.0) * 3.14/180
-        msg.imu2 = (msg.imu2 - 45.0) * 3.14/180
-        msg.imu3 = -(-45.0 - msg.imu3) * 3.14/180
-        msg.imu4 = (-135.0 - msg.imu4) * 3.14/180
+        msg.imu2 = (45.0 - msg.imu2) * 3.14/180
+        msg.imu3 = (45.0 + msg.imu3) * 3.14/180
+        msg.imu4 = (135.0 + msg.imu4) * 3.14/180
 
         if(msg.timestamp - self.timestamp != 0):
 
@@ -188,7 +203,7 @@ class Wrench_Estimator(Node):
         # return dtheta
 
     def wrench_estimator_body(self):
-        
+
         self.f_hat_body = (self.mass * self.v_dot) - (self.mass * self.g * self.e3) + self.f
 
         self.tau_hat_body = np.matmul(self.inertia_mat , (self.omega_dot)) + np.cross((self.omega), np.matmul(self.inertia_mat , self.omega)) - np.transpose(self.tau)
@@ -219,15 +234,18 @@ class Wrench_Estimator(Node):
         self.rt_matrix_alpha3 = self.rt_matrix(self.alpha[2])
         self.rt_matrix_alpha4 = self.rt_matrix(self.alpha[3])
 
-        self.f_hat_imu1_b = np.matmul(self.rt_matrix_alpha1,np.array([0,self.f_hat_imu1,0]))
-        self.f_hat_imu2_b = np.matmul(self.rt_matrix_alpha2,np.array([0,self.f_hat_imu2,0]))
-        self.f_hat_imu3_b = np.matmul(self.rt_matrix_alpha3,np.array([0,self.f_hat_imu3,0]))
-        self.f_hat_imu4_b = np.matmul(self.rt_matrix_alpha4,np.array([0,self.f_hat_imu4,0]))
+        self.f_hat_imu1_b = np.matmul(self.rt_matrix_alpha1,np.array([self.f_hat_imu1,0,0]))
+        self.f_hat_imu2_b = np.matmul(self.rt_matrix_alpha2,np.array([self.f_hat_imu2,0,0]))
+        self.f_hat_imu3_b = np.matmul(self.rt_matrix_alpha3,np.array([self.f_hat_imu3,0,0]))
+        self.f_hat_imu4_b = np.matmul(self.rt_matrix_alpha4,np.array([self.f_hat_imu4,0,0]))
         
         self.f_hat_imu1_b_w = np.matmul(self.rotation_matrix, self.f_hat_imu1_b)
         self.f_hat_imu2_b_w = np.matmul(self.rotation_matrix, self.f_hat_imu2_b)
         self.f_hat_imu3_b_w = np.matmul(self.rotation_matrix, self.f_hat_imu3_b)
         self.f_hat_imu4_b_w = np.matmul(self.rotation_matrix, self.f_hat_imu4_b)
+        
+        # print("Alpha:", self.alpha[2])
+        # print(self.f_hat_imu3,"--",self.f_hat_imu3_b,"--",self.f_hat_imu3_b_w)
 
         self.f_hat_b_w =  self.f_hat_imu1_b_w + self.f_hat_imu2_b_w + self.f_hat_imu3_b_w + self.f_hat_imu4_b_w
 
@@ -235,7 +253,7 @@ class Wrench_Estimator(Node):
 
         msg.f_x = float(self.f_hat_b_w[0] + self.f_hat_body[0])
         msg.f_y = float(self.f_hat_b_w[1] + self.f_hat_body[1])
-        msg.f_z = float(self.f_hat_b_w[2] + self.f_hat_body[2])
+        msg.f_z = float(self.f_hat_b_w[2] + self.f_hat_body[2]) + 11.772
 
         msg.tau_p = float(self.tau_hat_body[0])
         msg.tau_q = float(self.tau_hat_body[1])
@@ -243,12 +261,15 @@ class Wrench_Estimator(Node):
 
         msg.timestamp = self.timestamp
 
+        # print(self.f_hat_b_w,self.tau_hat_arm)
+
         self.wrench_pub.publish(msg)
+        print("Wrench Estimator Running")
         # print(msg)
 
     def rt_matrix(self, theta):
 
-        return np.array([[np.cos(theta), np.sin(theta), 0], [-np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
+        return np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
 
 def main(args=None):
     rclpy.init(args=args)
