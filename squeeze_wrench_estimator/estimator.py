@@ -2,8 +2,10 @@ import rclpy
 import serial
 from rclpy.node import Node
 from std_msgs.msg import String
-from bno055_raspi_squeeze.msg import ImuData
-from squeeze_wrench_estimator.msg import ExternalWrenchEstimate
+# from bno055_raspi_squeeze.msg import ImuData
+# from squeeze_wrench_estimator.msg import ExternalWrenchEstimate
+from squeeze_custom_msgs.msg import ImuData
+from squeeze_custom_msgs.msg import ExternalWrenchEstimate
 from px4_msgs.msg import VehicleMagnetometer
 import numpy as np
 import time
@@ -22,6 +24,8 @@ class Wrench_Estimator(Node):
 
     def __init__(self):
         super().__init__('Wrench_Estimator')
+
+        print("Starting Wrench Estimator Node")
 
         self.rotation_matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
