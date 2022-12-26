@@ -1,4 +1,4 @@
-# squeeze_wrench_estimator
+# Squeeze Wrench Estimator
 Repo to estimate wrench for SQUEEZE
 
 ## Dependencies
