@@ -1,0 +1,64 @@
+import rclpy
+import serial
+from rclpy.node import Node
+from std_msgs.msg import String
+# from bno055_raspi_squeeze.msg import ImuData
+# from squeeze_wrench_estimator.msg import ExternalWrenchEstimate
+from squeeze_custom_msgs.msg import ImuData
+from squeeze_custom_msgs.msg import ExternalWrenchEstimate
+from px4_msgs.msg import VehicleMagnetometer
+import numpy as np
+import time
+from scipy.spatial.transform import Rotation
+import math
+from scipy.signal import butter,filtfilt
+
+from px4_msgs.msg import VehicleAttitude
+from px4_msgs.msg import SensorCombined
+from px4_msgs.msg import ControllerOut
+from px4_msgs.msg import VehicleOdometry
+
+from scipy.spatial.transform import Rotation as R
+
+
+class ControllerFilter(Node):
+
+    def __init__(self):
+        super().__init__('Controller_Filter')
+
+        self.controller_out_sub = self.create_subscription(ControllerOut, '/fmu/controller_out/out', self.controller_out_callback, 1)
+
+        self.controller_filt_pub = self.create_publisher(ControllerOut, '/fmu/controller_out_filt/out', 1)
+
+        self.controller_out_prev = np.array([0.0,0.0,0.0,0.0,0.0,0.0]) # fx, fy, fz, taux, tauy, tauz
+        self.alpha_controller_out = np.array([0.01,0.01,0.05,0.05,0.3,0.5])
+
+    def controller_out_callback(self,msg):
+        self.controller_out_estimate = np.array([msg.f[0]*0, msg.f[1]*0, msg.f[2]*32.66, msg.tau[0]*1.36, msg.tau[1]*1.36, msg.tau[2]*0.012])
+        self.controller_out_lpf  = self.lp_filter(self.controller_out_estimate, self.controller_out_prev, self.alpha_controller_out)
+        self.controller_out_prev = self.controller_out_lpf
+
+        self.f = self.controller_out_lpf[:3]
+        self.tau = self.controller_out_lpf[3:]
+
+        self.controller_filt_pub.publish(self.controller_out_lpf)
+
+    def lp_filter(self,current, previous, alpha):
+        return alpha*current + (1-alpha)*previous
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    wrench = ControllerFilter()
+
+    rclpy.spin(wrench)
+
+    # Destroy the node explicitly
+    # (optional - otherwise it will be done automatically
+    # when the garbage collector destroys the node object)
+    ControllerFilter.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

@@ -29,16 +29,16 @@ class Wrench_Estimator(Node):
 
         self.rotation_matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        # self.imu1 = [0.0, 0.0, 0.0] # [dtheta, dtheta/dt, ddtheta/dtt]
-        # self.imu2 = [0.0, 0.0, 0.0]
-        # self.imu3 = [0.0, 0.0, 0.0]
-        # self.imu4 = [0.0, 0.0, 0.0]
+        self.imu1 = [0.0, 0.0, 0.0, 0.0] # [theta, dtheta, dtheta/dt, ddtheta/dtt]
+        self.imu2 = [0.0, 0.0, 0.0, 0.0]
+        self.imu3 = [0.0, 0.0, 0.0, 0.0]
+        self.imu4 = [0.0, 0.0, 0.0, 0.0]
         self.timestamp = time.time()
 
-        self.imu1_prev = [0.0,0.0,0.0]
-        self.imu2_prev = [0.0,0.0,0.0]
-        self.imu3_prev = [0.0,0.0,0.0]
-        self.imu4_prev = [0.0,0.0,0.0]
+        self.imu1_prev = [0.0,0.0,0.0,0.0]
+        self.imu2_prev = [0.0,0.0,0.0,0.0]
+        self.imu3_prev = [0.0,0.0,0.0,0.0]
+        self.imu4_prev = [0.0,0.0,0.0,0.0]
 
         self.f = np.array([0.0,0.0,0.0])
         self.tau = np.array([0.0,0.0,0.0])
@@ -100,6 +100,8 @@ class Wrench_Estimator(Node):
 
         # print(msg.f[0], msg.f[1], msg.f[2], msg.tau[0], msg.tau[1], msg.tau[2])
 
+        
+
         self.controller_out_estimate = np.array([msg.f[0]*0, msg.f[1]*0, msg.f[2]*32.66, msg.tau[0]*1.36, msg.tau[1]*1.36, msg.tau[2]*0.012])
         self.controller_out_lpf  = self.lp_filter(self.controller_out_estimate, self.controller_out_prev, self.alpha_controller_out)
         self.controller_out_prev = self.controller_out_lpf
@@ -144,10 +146,7 @@ class Wrench_Estimator(Node):
 
     def imu_angle_callback(self, msg):
 
-        imu1 = [0.0, 0.0, 0.0] # [dtheta, dtheta/dt, ddtheta/dtt]
-        imu2 = [0.0, 0.0, 0.0]
-        imu3 = [0.0, 0.0, 0.0]
-        imu4 = [0.0, 0.0, 0.0]
+        print("First Inst Prev: ",self.imu2_prev[1])
 
         # msg.imu1 = msg.imu1 - 135.0
         # msg.imu2 = 45.0 - msg.imu2
@@ -156,64 +155,76 @@ class Wrench_Estimator(Node):
 
         self.theta = [msg.imu1, msg.imu2, msg.imu3, msg.imu4] # Actual arm angles from node
 
-        msg.imu1 = (msg.imu1 - 130.0) * 3.14/180
-        msg.imu2 = (46.0 - msg.imu2) * 3.14/180
-        msg.imu3 = (47.0 + msg.imu3) * 3.14/180
-        msg.imu4 = -(130.0 + msg.imu4) * 3.14/180
+        msg.imu1 = -(msg.imu1 - 135.0) * 3.14/180
+        msg.imu2 = (45.0 - msg.imu2) * 3.14/180
+        msg.imu3 = (45.0 + msg.imu3) * 3.14/180
+        msg.imu4 = (135.0 + msg.imu4) * 3.14/180
 
-        # self.eff_imu1 = self.dthetha_eff(msg.imu1)
-        # self.eff_imu2 = self.dthetha_eff(msg.imu2)
-        # self.eff_imu3 = self.dthetha_eff(msg.imu3)
-        # self.eff_imu4 = self.dthetha_eff(msg.imu4)
+        print("IMU2", msg.imu2)
 
         if(msg.timestamp - self.timestamp != 0):
 
-            dt = (msg.timestamp - self.timestamp) / 1000000  # TimeStamp in Microseconds
-            # self.dt = 0.05
+            self.dt = (msg.timestamp - self.timestamp) / 1000000  # TimeStamp in Microseconds
 
-            imu1[0] = self.dthetha_eff(msg.imu1)
-            imu2[0] = self.dthetha_eff(msg.imu2)
-            imu3[0] = self.dthetha_eff(msg.imu3)
-            imu4[0] = self.dthetha_eff(msg.imu4)
+            # print(self.dt)
 
-            imu1[1] = (imu1[0] - self.imu1_prev[0])/ dt
-            imu2[1] = (imu2[0] - self.imu2_prev[0])/ dt
-            imu3[1] = (imu3[0] - self.imu3_prev[0])/ dt
-            imu4[1] = (imu4[0] - self.imu4_prev[0])/ dt
+            # self.imu1[3] = ((msg.imu1 - self.imu1[1])/self.dt - self.imu1[2]) / self.dt
 
-            imu1[2] = (imu1[1] - self.imu1_prev[1]) / dt
-            imu2[2] = (imu2[1] - self.imu2_prev[1]) / dt
-            imu3[2] = (imu3[1] - self.imu3_prev[1]) / dt
-            imu4[2] = (imu4[1] - self.imu4_prev[1]) / dt
+            # self.imu1[2] = (msg.imu1 - self.imu1[1])/self.dt
+
+            # self.imu1[1] = self.dthetha_estimate(msg.imu1)
+
+            print("Second Inst Prev: ",self.imu2_prev[1])
+
+            # self.imu1[1] = self.dthetha_eff(msg.imu1)
+            # self.imu2[1] = self.dthetha_eff(msg.imu2)
+            # self.imu3[1] = self.dthetha_eff(msg.imu3)
+            # self.imu4[1] = self.dthetha_eff(msg.imu4)
+
+            # self.imu1[1] = (msg.imu1)
+            # self.imu2[1] = (msg.imu2)
+            # self.imu3[1] = (msg.imu3)
+            # self.imu4[1] = (msg.imu4)
+
+            print("Third Inst Prev: ",self.imu2_prev[1])
+
+            if(abs(msg.imu2) > 0.1):
+                # print(self.dt)
+                print("inside:", self.imu2)
+                print(self.imu2_prev[1])
+                print("----")
+                exit()
             
-            # self.imu1[2] = (self.eff_imu1 - self.imu1_prev[1] ) / self.dt
-            # self.imu2[2] = (self.eff_imu2 - self.imu2_prev[1] ) / self.dt
-            # self.imu3[2] = (self.eff_imu3 - self.imu3_prev[1] ) / self.dt
-            # self.imu4[2] = (self.eff_imu4 - self.imu4_prev[1] ) / self.dt   
-            
-            # self.imu1[3] = (self.imu1[2] - self.imu1_prev[2]) / self.dt
-            # self.imu2[3] = (self.imu2[2] - self.imu2_prev[2]) / self.dt
-            # self.imu3[3] = (self.imu3[2] - self.imu3_prev[2]) / self.dt
-            # self.imu4[3] = (self.imu4[2] - self.imu4_prev[2]) / self.dt
+            # self.imu1[2] = (self.dthetha_eff(msg.imu1) - self.imu1_prev[1] ) / self.dt
+            # self.imu2[2] = (self.dthetha_eff(msg.imu2) - self.imu2_prev[1] ) / self.dt
+            # self.imu3[2] = (self.dthetha_eff(msg.imu3) - self.imu3_prev[1] ) / self.dt
+            # self.imu4[2] = (self.dthetha_eff(msg.imu4) - self.imu4_prev[1] ) / self.dt
 
-            # self.imu1_prev = [0.0,self.eff_imu1,self.imu1[2],self.imu1[3]]
-            # self.imu2_prev = [0.0,self.eff_imu2,self.imu2[2],self.imu2[3]]
-            # self.imu3_prev = [0.0,self.eff_imu3,self.imu3[2],self.imu3[3]]
-            # self.imu4_prev = [0.0,self.eff_imu4,self.imu4[2],self.imu4[3]]
+            self.imu1[2] = (self.imu1[1] - self.imu1_prev[1] ) / self.dt
+            self.imu2[2] = (msg.imu2 - self.imu2_prev[1] ) / self.dt
+            self.imu3[2] = (self.imu3[1] - self.imu3_prev[1] ) / self.dt
+            self.imu4[2] = (self.imu4[1] - self.imu4_prev[1] ) / self.dt
+            
+            self.imu1[3] = (self.imu1[2] - self.imu1_prev[2]) / self.dt
+            self.imu2[3] = (self.imu2[2] - self.imu2_prev[2]) / self.dt
+            self.imu3[3] = (self.imu3[2] - self.imu3_prev[2]) / self.dt
+            self.imu4[3] = (self.imu4[2] - self.imu4_prev[2]) / self.dt
+
+            self.imu1_prev = self.imu1
+            self.imu2_prev = [0.0,msg.imu2,self.imu2[2],self.imu2[3]]
+            self.imu3_prev = self.imu3
+            self.imu4_prev = self.imu4
 
             self.timestamp = msg.timestamp
 
-            self.wrench_estimator_body()
-            self.wrench_estimator_arm(imu1,imu2,imu3,imu4)
+        # print(self.imu1)
 
-            self.imu1_prev = imu1
-            self.imu2_prev = imu2
-            self.imu3_prev = imu3
-            self.imu4_prev = imu4
+        # self.wrench_estimator_body()
+        # self.wrench_estimator_arm()
 
 
     def dthetha_eff(self, dtheta): # Curve Fitting
-                                   # If Deflection is less than 15 Degrees (0.26 Rads) we use (2*dtheta^3) else we use same dtheta
+                                   # If Deflection is less than 15 Degrees (0.26 Rads) we use 2*(dtheta^3) else we use same dtheta
  
         # if (dtheta != 0):
         #     # dthetha_eff =  ( 4 / (1 + 0.15 * abs(dtheta))) * (dtheta - 0.085 * (dtheta / abs(dtheta)))**3
@@ -229,13 +240,8 @@ class Wrench_Estimator(Node):
         # else:
         #     dtheta_eff = dtheta
 
-        if (abs(dtheta) < 0.09):
-            dtheta_eff = (2 * dtheta)**3 
-        else:
-            dtheta_eff = dtheta
-
-        return dtheta_eff
-        # return dtheta
+        #return dtheta_eff
+        return dtheta
 
     def wrench_estimator_body(self):
 
@@ -245,16 +251,16 @@ class Wrench_Estimator(Node):
         
         # print(self.tau_hat_body)
 
-    def wrench_estimator_arm(self,imu1,imu2,imu3,imu4):
+    def wrench_estimator_arm(self):
 
         msg = ExternalWrenchEstimate()
 
         self.arm_length = 0.15
         
-        self.f_hat_imu1 = ( 1.3077 * imu1[0] + 0.01 * imu1[1] + 0.0015 * imu1[2] ) / self.arm_length # Arm Distance = 0.15m
-        self.f_hat_imu2 = ( 1.3077 * imu2[0] + 0.01 * imu2[1] + 0.0015 * imu2[2] ) / self.arm_length
-        self.f_hat_imu3 = ( 1.3077 * imu3[0] + 0.01 * imu3[1] + 0.0015 * imu3[2] ) / self.arm_length
-        self.f_hat_imu4 = ( 1.3077 * imu4[0] + 0.01 * imu4[1] + 0.0015 * imu4[2] ) / self.arm_length
+        self.f_hat_imu1 = ( 1.3077 * self.imu1[1] + 0.01 * self.imu1[2] + 0.0015 * self.imu1[3] ) / self.arm_length # Arm Distance = 0.15m
+        self.f_hat_imu2 = ( 1.3077 * self.imu2[1] + 0.01 * self.imu2[2] + 0.0015 * self.imu2[3] ) / self.arm_length
+        self.f_hat_imu3 = ( 1.3077 * self.imu3[1] + 0.01 * self.imu3[2] + 0.0015 * self.imu3[3] ) / self.arm_length
+        self.f_hat_imu4 = ( 1.3077 * self.imu4[1] + 0.01 * self.imu4[2] + 0.0015 * self.imu4[3] ) / self.arm_length
 
         self.b1 = np.matmul(self.rotation_matrix,self.e1)
         self.b2 = np.matmul(self.rotation_matrix,self.e2)
@@ -297,6 +303,22 @@ class Wrench_Estimator(Node):
         msg.timestamp = self.timestamp
 
         # print(self.f_hat_b_w,self.tau_hat_arm)
+
+##############################################################################
+        est_msg = ExternalWrenchEstimate()
+
+        est_msg.f_x = self.f_hat_imu2
+        est_msg.f_y = self.f_hat_imu3
+        est_msg.f_z = 0.0
+
+        est_msg.tau_p = 0.0
+        est_msg.tau_q = 0.0
+        est_msg.tau_r = 0.0
+
+        est_msg.timestamp = self.timestamp
+
+        self.controller_out_estimate_pub.publish(est_msg)
+##############################################################################
         self.wrench_pub.publish(msg)
         # print("Wrench Estimator Running")
         # print(msg)
