@@ -13,6 +13,8 @@ from scipy.spatial.transform import Rotation
 import math
 from scipy.signal import butter,filtfilt
 
+from std_msgs.msg import String
+
 from px4_msgs.msg import VehicleAttitude
 from px4_msgs.msg import SensorCombined
 from px4_msgs.msg import ControllerOut
@@ -34,6 +36,8 @@ class Wrench_Estimator(Node):
         # self.imu3 = [0.0, 0.0, 0.0]
         # self.imu4 = [0.0, 0.0, 0.0]
         self.timestamp = time.time()
+
+        self.avg_dt = 0.0
 
         self.imu1_prev = [0.0,0.0,0.0]
         self.imu2_prev = [0.0,0.0,0.0]
@@ -85,9 +89,11 @@ class Wrench_Estimator(Node):
 
 
         # Publishers
-        self.wrench_pub = self.create_publisher(ExternalWrenchEstimate, 'External_Wrench_Estimate_New', 1)
+        self.wrench_pub = self.create_publisher(ExternalWrenchEstimate, 'External_Wrench_Estimate', 1)
 
-        self.controller_out_estimate_pub = self.create_publisher(ExternalWrenchEstimate, 'Controller_Out_Estimate', 1)
+        self.yaw_euler_pub = self.create_publisher(ImuData, 'Yaw_Euler', 1)
+
+        # self.imu_test_pub = self.create_publisher(ImuData, 'IMU_Test', 1)
 
         # timer_period = 50 # Hz
         # self.timer = self.create_timer(1/timer_period, self.wrench_estimator)
@@ -128,6 +134,21 @@ class Wrench_Estimator(Node):
         self.v_dot_prev = self.v_dot
         self.omega_dot_prev = self.omega_dot
         self.v_timestamp = msg.timestamp
+        
+        q = np.zeros(4)
+
+        q[3] = msg.q[0]
+        q[0] = msg.q[1]
+        q[1] = msg.q[2]
+        q[2] = msg.q[3]
+
+        rot = Rotation.from_quat(q)
+        rot_euler = rot.as_euler('xyz', degrees=True)  # [roll, pitch, yaw]
+
+        yaw = ImuData()
+        yaw.imu1 = rot_euler[2]
+
+        self.yaw_euler_pub.publish(yaw)
 
     def sensor_combined_callback(self, msg):
 
@@ -149,6 +170,8 @@ class Wrench_Estimator(Node):
         imu3 = [0.0, 0.0, 0.0]
         imu4 = [0.0, 0.0, 0.0]
 
+        # self.imu_test_pub.publish(msg)
+
         # msg.imu1 = msg.imu1 - 135.0
         # msg.imu2 = 45.0 - msg.imu2
         # msg.imu3 = -45 - msg.imu3
@@ -156,10 +179,10 @@ class Wrench_Estimator(Node):
 
         self.theta = [msg.imu1, msg.imu2, msg.imu3, msg.imu4] # Actual arm angles from node
 
-        msg.imu1 = (msg.imu1 - 130.0) * 3.14/180
+        msg.imu1 = -(msg.imu1 - 130.0) * 3.14/180
         msg.imu2 = (46.0 - msg.imu2) * 3.14/180
         msg.imu3 = (47.0 + msg.imu3) * 3.14/180
-        msg.imu4 = -(130.0 + msg.imu4) * 3.14/180
+        msg.imu4 = (130.0 + msg.imu4) * 3.14/180
 
         # self.eff_imu1 = self.dthetha_eff(msg.imu1)
         # self.eff_imu2 = self.dthetha_eff(msg.imu2)
@@ -168,7 +191,7 @@ class Wrench_Estimator(Node):
 
         if(msg.timestamp - self.timestamp != 0):
 
-            dt = (msg.timestamp - self.timestamp) / 1000000  # TimeStamp in Microseconds
+            dt = (msg.timestamp - self.timestamp) / 10**6  # TimeStamp in Microseconds
             # self.dt = 0.05
 
             imu1[0] = self.dthetha_eff(msg.imu1)
@@ -211,6 +234,9 @@ class Wrench_Estimator(Node):
             self.imu3_prev = imu3
             self.imu4_prev = imu4
 
+        else :
+            print("Timestamp Error")
+
 
     def dthetha_eff(self, dtheta): # Curve Fitting
                                    # If Deflection is less than 15 Degrees (0.26 Rads) we use (2*dtheta^3) else we use same dtheta
@@ -229,7 +255,7 @@ class Wrench_Estimator(Node):
         # else:
         #     dtheta_eff = dtheta
 
-        if (abs(dtheta) < 0.09):
+        if (abs(dtheta) < 0.26):
             dtheta_eff = (2 * dtheta)**3 
         else:
             dtheta_eff = dtheta
@@ -290,9 +316,13 @@ class Wrench_Estimator(Node):
         msg.f_y = float(self.f_hat_b_w[1] + self.f_hat_body[1])
         msg.f_z = float(self.f_hat_b_w[2] + self.f_hat_body[2]) + 11.772
 
-        msg.tau_p = float(self.tau_hat_body[0])
-        msg.tau_q = float(self.tau_hat_body[1])
-        msg.tau_r = float(self.tau_hat_body[2] + self.tau_hat_arm)
+        # msg.f_x = self.f_hat_imu2
+        # msg.f_y = self.f_hat_imu3
+        # msg.f_z = 0.0
+
+        # msg.tau_p = self.f_hat_imu1
+        # msg.tau_q = self.f_hat_imu4
+        # msg.tau_r = 0.0
 
         msg.timestamp = self.timestamp
 
