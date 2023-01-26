@@ -58,8 +58,7 @@ class Wrench_Estimator(Node):
         self.omega_dot = np.array([0.0,0.0,0.0])
         self.omega_dot_prev = np.array([0.0,0.0,0.0])
 
-        self.v_gamma = 0.02 # LP filter for v_dot and omega_dot
-        self.omega_gamma = 0.05
+        self.gamma = 0.05 # LP filter for v_dot and omega_dot
 
         self.inertia_mat = ([0.011160,0.000003,0.000058],[0.000003, 0.011260,0.000044],[0.000058,0.000044,0.018540]) # kg.m^2
         self.mass = 1.25 # kg
@@ -67,22 +66,6 @@ class Wrench_Estimator(Node):
 
         self.controller_out_prev = np.array([0.0,0.0,0.0,0.0,0.0,0.0]) # fx, fy, fz, taux, tauy, tauz
         self.alpha_controller_out = np.array([0.01,0.01,0.05,0.05,0.02,0.5])
-
-        self.alpha_controller_out = np.array([0.8,0.8,0.8,0.8,0.8,0.8,0.8])
-
-        self.controller_fx_filter = Median_LPF()
-        self.controller_fy_filter = Median_LPF()
-        self.controller_fz_filter = Median_LPF()
-        self.controller_taux_filter = Median_LPF()
-        self.controller_tauy_filter = Median_LPF()
-        self.controller_tauz_filter = Median_LPF()
-
-        self.fx_filter_buffer = np.zeros(3)
-        self.fy_filter_buffer = np.zeros(3)
-        self.fz_filter_buffer = np.zeros(3)
-        self.taux_filter_buffer = np.zeros(3)
-        self.tauy_filter_buffer = np.zeros(3)
-        self.tauz_filter_buffer = np.zeros(3)
 
         self.v_timestamp = 0.0
 
@@ -104,12 +87,14 @@ class Wrench_Estimator(Node):
         self.vehicle_odometry_sub = self.create_subscription(VehicleOdometry, '/fmu/vehicle_odometry/out', self.vehicle_odometry_callback, 1)
         self.controller_out_sub = self.create_subscription(ControllerOut, '/fmu/controller_out/out', self.controller_out_callback, 1)
 
+
+
         # Publishers
-        self.wrench_pub = self.create_publisher(ExternalWrenchEstimate, 'External_Wrench_Estimate_New', 1)
+        self.wrench_pub = self.create_publisher(ExternalWrenchEstimate, 'External_Wrench_Estimate_1', 1)
 
         self.yaw_euler_pub = self.create_publisher(Float32, 'Yaw_Euler', 1)
         
-        self.filt_controller_out_pub = self.create_publisher(ControllerOut, '/fmu/controller_out_filtered_new/out', 1)
+        self.filt_controller_out_pub = self.create_publisher(ControllerOut, '/fmu/controller_out_filtered/out', 1)
         self.omega_pub = self.create_publisher(Float32MultiArray, 'Omega', 1)
         self.omega_dot_pub = self.create_publisher(Float32MultiArray, 'Omega_Dot', 1)
 
@@ -117,9 +102,11 @@ class Wrench_Estimator(Node):
         self.pub_y = self.create_publisher(Float32MultiArray, 'wrench_estimator_body/term2', 1)
         self.pub_z = self.create_publisher(Float32MultiArray, 'wrench_estimator_body/term3', 1)
         self.total = self.create_publisher(Float32MultiArray, 'wrench_estimator_body/total', 1)
+        self.max = -100.0
 
         # timer_period = 50 # Hz
         # self.timer = self.create_timer(1/timer_period, self.wrench_estimator)
+        # 
 
     def lp_filter(self,current, previous, alpha):
         return alpha*current + (1-alpha)*previous
@@ -131,47 +118,18 @@ class Wrench_Estimator(Node):
         filt_controller_out = ControllerOut()
 
         self.controller_out_estimate = np.array([msg.f[0]*0, msg.f[1]*0, msg.f[2]*32.66, msg.tau[0]*1.36, msg.tau[1]*1.36, msg.tau[2]*0.012])
+        self.controller_out_lpf  = self.lp_filter(self.controller_out_estimate, self.controller_out_prev, self.alpha_controller_out)
+        self.controller_out_prev = self.controller_out_lpf
 
-        self.fx_filter_buffer = self.fx_filter_buffer[1:]
-        self.fx_filter_buffer = np.append(self.fx_filter_buffer, msg.f[0])
+        self.f = self.controller_out_lpf[:3]
+        self.tau = self.controller_out_lpf[3:]
 
-        self.fy_filter_buffer = self.fy_filter_buffer[1:]
-        self.fy_filter_buffer = np.append(self.fy_filter_buffer, msg.f[1])
-
-        self.fz_filter_buffer = self.fz_filter_buffer[1:]
-        self.fz_filter_buffer = np.append(self.fz_filter_buffer, msg.f[2])
-
-        self.taux_filter_buffer = self.taux_filter_buffer[1:]
-        self.taux_filter_buffer = np.append(self.taux_filter_buffer, msg.tau[0])
-
-        self.tauy_filter_buffer = self.tauy_filter_buffer[1:]
-        self.tauy_filter_buffer = np.append(self.tauy_filter_buffer, msg.tau[1])
-
-        self.tauz_filter_buffer = self.tauz_filter_buffer[1:]
-        self.tauz_filter_buffer = np.append(self.tauz_filter_buffer, msg.tau[2])
-
-        # self.controller_out_lpf  = self.lp_filter(self.controller_out_estimate, self.controller_out_prev, self.alpha_controller_out)
-        # self.controller_out_prev = self.controller_out_lpf
-
-        # self.f = self.controller_out_lpf[:3]
-        # self.tau = self.controller_out_lpf[3:]
-
-        # filt_controller_out.f[0] = self.controller_out_lpf[0]
-        # filt_controller_out.f[1] = self.controller_out_lpf[1]
-        # filt_controller_out.f[2] = self.controller_out_lpf[2]
-        # filt_controller_out.tau[0] = self.controller_out_lpf[3]
-        # filt_controller_out.tau[1] = self.controller_out_lpf[4]
-        # filt_controller_out.tau[2] = self.controller_out_lpf[5]
-
-        filt_controller_out.f[0] = self.controller_fx_filter.med_lp(self.fx_filter_buffer,self.alpha_controller_out[0])
-        filt_controller_out.f[1] = self.controller_fy_filter.med_lp(self.fy_filter_buffer,self.alpha_controller_out[1])
-        filt_controller_out.f[2] = self.controller_fz_filter.med_lp(self.fz_filter_buffer,self.alpha_controller_out[2])
-        filt_controller_out.tau[0] = self.controller_taux_filter.med_lp(self.taux_filter_buffer,self.alpha_controller_out[3])
-        filt_controller_out.tau[1] = self.controller_tauy_filter.med_lp(self.tauy_filter_buffer,self.alpha_controller_out[4])
-        filt_controller_out.tau[2] = self.controller_tauz_filter.med_lp(self.tauz_filter_buffer,self.alpha_controller_out[5])
-
-        self.f = np.array([filt_controller_out.f[0], filt_controller_out.f[1], filt_controller_out.f[2]])
-        self.tau = np.array([filt_controller_out.tau[0], filt_controller_out.tau[1], filt_controller_out.tau[2]])
+        filt_controller_out.f[0] = self.controller_out_lpf[0]
+        filt_controller_out.f[1] = self.controller_out_lpf[1]
+        filt_controller_out.f[2] = self.controller_out_lpf[2]
+        filt_controller_out.tau[0] = self.controller_out_lpf[3]
+        filt_controller_out.tau[1] = self.controller_out_lpf[4]
+        filt_controller_out.tau[2] = self.controller_out_lpf[5]
 
         filt_controller_out.timestamp = msg.timestamp
 
@@ -186,15 +144,14 @@ class Wrench_Estimator(Node):
         self.omega = np.array([msg.rollspeed, msg.pitchspeed, msg.yawspeed])
         self.v_dt = (msg.timestamp - self.v_timestamp) * 10**-6
 
-        # self.v = (self.v * 0.1) + (self.v_prev * (1 - 0.1))
         self.omega = (self.omega * 0.1) + (self.omega_prev * (1 - 0.1))
 
         self.v_timestamp = msg.timestamp
         self.v_dot = (self.v - self.v_prev) / self.v_dt
         self.omega_dot = (self.omega - self.omega_prev) / self.v_dt
 
-        self.v_dot = (self.v_dot * self.v_gamma) + (self.v_dot_prev * (1 - self.v_gamma))
-        self.omega_dot = (self.omega_dot * self.omega_gamma) + (self.omega_dot_prev * (1 - self.omega_gamma))
+        self.v_dot = (self.v_dot * self.gamma) + (self.v_dot_prev * (1 - self.gamma))
+        self.omega_dot = (self.omega_dot * self.gamma) + (self.omega_dot_prev * (1 - self.gamma))
 
         self.v_prev = self.v
         self.omega_prev = self.omega
@@ -205,11 +162,8 @@ class Wrench_Estimator(Node):
         omega_pub = Float32MultiArray()
         omega_dot_pub = Float32MultiArray()
 
-        omega_pub.data = [float(self.v[0]), float(self.v[1]), float(self.v[2])]
-        omega_dot_pub.data = [float(self.v_dot[0]), float(self.v_dot[1]), float(self.v_dot[2])]
-
-        # omega_pub.data = [float(self.omega[0]), float(self.omega[1]), float(self.omega[2])]
-        # omega_dot_pub.data = [float(self.omega_dot[0]), float(self.omega_dot[1]), float(self.omega_dot[2])]
+        omega_pub.data = [float(self.omega[0]), float(self.omega[1]), float(self.omega[2])]
+        omega_dot_pub.data = [float(self.omega_dot[0]), float(self.omega_dot[1]), float(self.omega_dot[2])]
 
         self.omega_pub.publish(omega_pub)
         self.omega_dot_pub.publish(omega_dot_pub)
@@ -324,6 +278,33 @@ class Wrench_Estimator(Node):
 
         self.tau_hat_body = (np.matmul(self.inertia_mat , (self.omega_dot))) + (np.cross((self.omega), np.matmul(self.inertia_mat , self.omega))) - (np.transpose(self.tau))
         
+        # x = (np.matmul(self.inertia_mat , (self.omega_dot)))
+        # y = (np.cross((self.omega), np.matmul(self.inertia_mat , self.omega)))
+        # z = (np.transpose(self.tau))
+
+        # x_pub = Float32MultiArray()
+        # y_pub = Float32MultiArray()
+        # z_pub = Float32MultiArray()
+        # total = Float32MultiArray()
+
+        # x_pub.data = [float(x[0]), float(x[1]), float(x[2])]
+        # y_pub.data = [float(y[0]), float(y[1]), float(y[2])]
+        # z_pub.data = [float(z[0]), float(z[1]), float(z[2])]
+        # total.data = [float(self.tau_hat_body[0]), float(self.tau_hat_body[1]), float(self.tau_hat_body[2])]
+
+        # self.pub_x.publish(x_pub)
+        # self.pub_y.publish(y_pub)
+        # self.pub_z.publish(z_pub)
+        # self.total.publish(total)
+
+        # if (abs(self.tau_hat_body[1]) > self.max):
+        #     self.max = abs(self.tau_hat_body[1])
+        #     print("Total",self.tau_hat_body[1])
+        #     print("Term1:",x[1],"Term2:",y[1],"Term3:",z[1])
+
+        # print(self.tau_hat_body[1])
+        # print(total_pub)
+
     def wrench_estimator_arm(self,imu1,imu2,imu3,imu4):
 
         msg = ExternalWrenchEstimate()
@@ -380,38 +361,21 @@ class Wrench_Estimator(Node):
         msg.tau_q = float(self.tau_hat_body[1])
         msg.tau_r = float(self.tau_hat_body[2] + self.tau_hat_arm)
 
+        if (abs(msg.tau_q) > self.max):
+            self.max = abs(msg.tau_q)
+            print(self.max)
+
         msg.timestamp = self.timestamp
 
         # print(self.f_hat_b_w,self.tau_hat_arm)
         self.wrench_pub.publish(msg)
-        print("Wrench Estimator Running")
-        print("------------------------")
+        # print("Wrench Estimator Running")
+        # print("------------------------")
         # print(msg)
 
     def rt_matrix(self, theta):
 
         return np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
-
-class Median_LPF:
-    def __init__(self):
-        self.lp_vase1 = [0, 0]
-        self.lp_vase2 = [0, 0]
-
-    def med_lp(self, v_window, lp_alpha):
-        med_vase = []
-        med_filter = []
-
-        for j in range(len(v_window)):
-            h = j + 1
-            med_vase.append(v_window[len(v_window)-h])
-        
-        med_filter = np.median(med_vase)
-        self.lp_vase1[0] = lp_alpha*med_filter + (1-lp_alpha)*self.lp_vase1[1]
-        self.lp_vase2[0] = lp_alpha*self.lp_vase1[0] + (1-lp_alpha)*self.lp_vase2[1]
-        lp_filter = self.lp_vase2[0]
-        self.lp_vase1[1] = self.lp_vase1[0]
-        self.lp_vase2[1] = self.lp_vase2[0]
-        return lp_filter
 
 def main(args=None):
     rclpy.init(args=args)
