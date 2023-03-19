@@ -606,7 +606,7 @@ class Wrench_Estimator(Node):
         # msg.f_y = self.net_wrench[1] = float(self.f_hat_b_w[1] + self.f_hat_body[1] - self.friction_force[1])
         # msg.f_z = self.net_wrench[2] = float(self.f_hat_b_w[2] + self.f_hat_body[2] - self.friction_force[2])
 
-        msg.f_x = float(self.f_hat_body[0])
+        msg.f_x = float(self.f_hat_body[0])     # Only Body Wrench Being Published
         msg.f_y = float(self.f_hat_body[1])
         msg.f_z = float(self.f_hat_body[2])
 
