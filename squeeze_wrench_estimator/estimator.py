@@ -602,13 +602,13 @@ class Wrench_Estimator(Node):
 
         self.tau_hat_arm = (self.f_hat_imu1 + self.f_hat_imu2 + self.f_hat_imu3 + self.f_hat_imu4) * self.arm_length
 
-        # msg.f_x = self.net_wrench[0] = float(self.f_hat_b_w[0] + self.f_hat_body[0] - self.friction_force[0])
-        # msg.f_y = self.net_wrench[1] = float(self.f_hat_b_w[1] + self.f_hat_body[1] - self.friction_force[1])
-        # msg.f_z = self.net_wrench[2] = float(self.f_hat_b_w[2] + self.f_hat_body[2] - self.friction_force[2])
+        msg.f_x = self.net_wrench[0] = float(self.f_hat_b_w[0] + self.f_hat_body[0] - self.friction_force[0])
+        msg.f_y = self.net_wrench[1] = float(self.f_hat_b_w[1] + self.f_hat_body[1] - self.friction_force[1])
+        msg.f_z = self.net_wrench[2] = float(self.f_hat_b_w[2] + self.f_hat_body[2] - self.friction_force[2])
 
-        msg.f_x = float(self.f_hat_body[0])     # Only Body Wrench Being Published
-        msg.f_y = float(self.f_hat_body[1])
-        msg.f_z = float(self.f_hat_body[2])
+        # msg.f_x = float(self.f_hat_body[0])     # Only Body Wrench Being Published
+        # msg.f_y = float(self.f_hat_body[1])
+        # msg.f_z = float(self.f_hat_body[2])
 
         msg.tau_p = self.net_wrench[3] = float(self.tau_hat_body[0])
         msg.tau_q = self.net_wrench[4] = float(self.tau_hat_body[1])
