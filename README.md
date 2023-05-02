@@ -1,4 +1,4 @@
-# Squeeze Wrench Estimator
+# EXPLORER Wrench Estimator
 Repo to estimate wrench for SQUEEZE
 
 ## Dependencies
