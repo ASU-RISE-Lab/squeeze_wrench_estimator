@@ -47,7 +47,7 @@ class Wrench_Estimator(Node):
         self.initialize_body_wrench_filter()
 ########################################################################################################################################
         # Subscribers
-        self.imu_angle_sub = self.create_subscription(ImuData, '/IMU_Data_Fil', self.imu_angle_callback, 1)
+        # self.imu_angle_sub = self.create_subscription(ImuData, '/IMU_Data_Fil', self.imu_angle_callback, 1)
         self.vehicle_odometry_sub = self.create_subscription(VehicleOdometry, '/fmu/vehicle_odometry/out', self.vehicle_odometry_callback, 1)
         self.controller_out_sub = self.create_subscription(ControllerOut, '/fmu/controller_out/out', self.controller_out_callback, 1)
         # self.move_direction_sub = self.create_subscription(Float64, '/Move_Direction', self.move_direction_callback, 1)
